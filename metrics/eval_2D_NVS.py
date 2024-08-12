@@ -34,11 +34,11 @@ def calc_2D_metrics(pred_np, gt_np):
 
 # script to evaluate the model on GSO/RTMV/NeRF dataset
 # todo modify the path
-LOG_DIR = "../logs_4DoF"      # 6DoF, 4DoF
-DATASET = "NeRF" # GSO RTMV NeRF
+LOG_DIR = "../logs_6DoF"      # 6DoF, 4DoF
+DATASET = "RTMV" # GSO RTMV NeRF
 
 if DATASET == "GSO":
-    DATA_DIR = "/home/xin/data/EscherNet/Data/GSO30/"
+    DATA_DIR = "/data2/wlsgur4011/eschernet_data/EscherNet-Dataset/GSO30/"
     T_ins = [1, 2, 3, 5, 10]
     total_views = 25
     DATA_TYPE = "render_mvs_25"
@@ -48,7 +48,7 @@ elif DATASET == "RTMV":
     total_views = 20
     start_id = 10
 elif DATASET == "NeRF":
-    DATA_DIR = "/home/xin/data/EscherNet/Data/nerf_synthetic/"
+    DATA_DIR = "/data2/wlsgur4011/eschernet_data/nerf_synthetic/"
     T_ins = [1, 2, 3, 5, 10, 20, 50, 100]
     total_views = 200
     start_id = 0

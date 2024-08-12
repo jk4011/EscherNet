@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 
 # ours + NeuS
-DATA_DIR = "/home/xin/data/EscherNet/Data/GSO30"   # GSO
+DATA_DIR = "/data2/wlsgur4011/eschernet_data/EscherNet-Dataset//GSO30"   # GSO
 exp_dir = "/home/xin/6DoF/GSO3D/"
 
 config = "configs/neus_36.yaml"
@@ -30,3 +30,5 @@ for exp in exps:
               -b {config} \
               -l {output_NeuS}/NeuS"
         os.system(cmd)
+        break
+    break
