@@ -280,7 +280,7 @@ def vis_3D_rec(GT_DIR, REC_DIR, method_name):
 
 
 ### TODO
-GT_DIR = "/home/xin/data/EscherNet/Data/GSO30/"
+GT_DIR = "/data2/wlsgur4011/eschernet_data/EscherNet-Dataset/GSO30/"
 methods = {}
 # methods["One2345-XL"] = ""
 # methods["One2345"] = ""

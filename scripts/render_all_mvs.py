@@ -1,7 +1,7 @@
 import os
 import shutil
 
-DATA_ROOT = "/home/xin/data/EscherNet/Data/GSO30" # replace with path to GSO dataset
+DATA_ROOT = "/data2/wlsgur4011/eschernet_data/EscherNet-Dataset/GSO30" # replace with path to GSO dataset
 blender_path = "/home/xin/code/zero123/objaverse-rendering/blender-3.2.2-linux-x64/blender" # replace with path to blender
 
 # get the list of subfolders, only folders

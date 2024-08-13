@@ -3,8 +3,6 @@ SECONDS=0
 set -e        # exit when error
 set -o xtrace # print command
 
-GPU=$1
-
 cd 6DoF
 
 accelerate launch train_eschernet.py \
@@ -12,13 +10,14 @@ accelerate launch train_eschernet.py \
     --pretrained_model_name_or_path runwayml/stable-diffusion-v1-5 \
     --train_batch_size 32 \
     --dataloader_num_workers 16 \
-    --mixed_precision bf16 \
+    --mixed_precision fp16 \
     --gradient_checkpointing \
     --gradient_accumulation_steps 8 \
     --T_in 3 \
     --T_out 3 \
     --T_in_val 10 \
-    --output_dir logs_N3M3B256_SD1.5 
+    --output_dir logs_N3M3B256_SD1.5 \
+    --tracker_project_name eschernet
 
 # ... 
 
