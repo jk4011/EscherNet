@@ -953,7 +953,7 @@ def main(args):
                             # Switch back to the original UNet parameters.
                             ema_unet.restore(unet.parameters())
 
-                    if validation_dataloader is not None and global_step % args.validation_steps == 0:
+                    if validation_dataloader is not None and global_step % args.validation_steps == 0 and global_step > 5:
                         if args.use_ema:
                             # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
                             ema_unet.store(unet.parameters())
@@ -972,7 +972,7 @@ def main(args):
                         if args.use_ema:
                             # Switch back to the original UNet parameters.
                             ema_unet.restore(unet.parameters())
-                    if train_log_dataloader is not None and (global_step % args.validation_steps == 0 or global_step == 1):
+                    if train_log_dataloader is not None and (global_step % args.validation_steps == 0 or global_step == 1) and global_step > 5:
                         if args.use_ema:
                             # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
                             ema_unet.store(unet.parameters())

@@ -8,7 +8,7 @@ cd 6DoF
 accelerate launch train_eschernet.py \
     --train_data_dir /data2/wlsgur4011/zero123_data/views_release \
     --pretrained_model_name_or_path runwayml/stable-diffusion-v1-5 \
-    --train_batch_size 32 \
+    --train_batch_size 24 \
     --dataloader_num_workers 16 \
     --mixed_precision fp16 \
     --gradient_checkpointing \
