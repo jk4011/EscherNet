@@ -209,7 +209,6 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a Zero123 training script.")
-    
     parser.add_argument(
         "--config_file",
         type=str,
@@ -627,10 +626,19 @@ def main(args):
     else:
         optimizer_class = torch.optim.AdamW
 
+    class Unet_ImageEncoder(torch.nn.Module):
+        def __init__(self, unet, image_encoder):
+            super(Unet_ImageEncoder, self).__init__()
+            self.unet = unet
+            self.image_encoder = image_encoder
+
+        def forward(self, input_image):
+            return None
+    
+    unet_image_encoder = Unet_ImageEncoder(unet, image_encoder)
 
     optimizer = optimizer_class(
-        [{"params": unet.parameters(), "lr": args.learning_rate},
-         {"params": image_encoder.parameters(), "lr": args.learning_rate}],
+        [{"params": unet_image_encoder.parameters(), "lr": args.learning_rate}],
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon
@@ -704,9 +712,11 @@ def main(args):
             param_group['lr'] = lr
 
     # Prepare everything with our `accelerator`.
-    unet, image_encoder, optimizer, train_dataloader, validation_dataloader, train_log_dataloader = accelerator.prepare(
-        unet, image_encoder, optimizer, train_dataloader, validation_dataloader, train_log_dataloader
+    unet_image_encoder, optimizer, train_dataloader, validation_dataloader, train_log_dataloader = accelerator.prepare(
+        unet_image_encoder, optimizer, train_dataloader, validation_dataloader, train_log_dataloader
     )
+    unet = unet_image_encoder.unet
+    image_encoder = unet_image_encoder.image_encoder
 
     if args.use_ema:
         ema_unet.to(accelerator.device)
@@ -874,6 +884,7 @@ def main(args):
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
+                
                 if args.use_ema:
                     ema_unet.step(unet.parameters())
                 progress_bar.update(1)
@@ -997,6 +1008,8 @@ def main(args):
                         if args.use_ema:
                             # Switch back to the original UNet parameters.
                             ema_unet.restore(unet.parameters())
+            
+            
             loss_epoch += loss.detach().item()
             num_train_elems += 1
 

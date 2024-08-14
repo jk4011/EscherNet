@@ -16,8 +16,8 @@ if [ $((BS_PER_GPU * N_GPUS * N_ACCUMULATION)) -ne ${TOTAL_BS} ]; then
 fi
 echo "BS_PER_GPU: ${BS_PER_GPU}"
 
-accelerate launch train_eschernet.py \
-    --config_file configs/original.yaml \
+accelerate launch train_eschernet_deepspeed.py \
+    --config_file configs/deepspeed.yaml \
     --train_data_dir /data2/wlsgur4011/zero123_data/views_release \
     --pretrained_model_name_or_path runwayml/stable-diffusion-v1-5 \
     --train_batch_size ${BS_PER_GPU} \
