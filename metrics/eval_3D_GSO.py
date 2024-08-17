@@ -289,11 +289,11 @@ methods = {}
 # methods["DreamGaussian"] = ""
 # methods["DreamGaussian-XL"] = ""
 # methods["SyncDreamer"] = ""
-methods["Ours_T1"] = "/GSO3D/ours_GSO_T1/NeuS/"
-methods["Ours_T2"] = "/GSO3D/ours_GSO_T2/NeuS/"
-methods["Ours_T3"] = "/GSO3D/ours_GSO_T3/NeuS/"
-methods["Ours_T5"] = "/GSO3D/ours_GSO_T5/NeuS/"
-methods["Ours_T10"] = "/GSO3D/ours_GSO_T10/NeuS"
+methods["Ours_T1"] = "/data2/wlsgur4011/EscherNet/logs_6DoF/Neus/ours_GSO_T1/NeuS/"
+methods["Ours_T2"] = "/data2/wlsgur4011/EscherNet/logs_6DoF/Neus/ours_GSO_T2/NeuS/"
+methods["Ours_T3"] = "/data2/wlsgur4011/EscherNet/logs_6DoF/Neus/ours_GSO_T3/NeuS/"
+methods["Ours_T5"] = "/data2/wlsgur4011/EscherNet/logs_6DoF/Neus/ours_GSO_T5/NeuS/"
+methods["Ours_T10"] = "/data2/wlsgur4011/EscherNet/logs_6DoF/Neus/ours_GSO_T10/NeuS"
 
 for method_name in methods.keys():
     print("method_name: ", method_name)
