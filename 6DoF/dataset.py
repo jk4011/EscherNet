@@ -11,6 +11,8 @@ import webdataset as wds
 from torch.utils.data.distributed import DistributedSampler
 import matplotlib.pyplot as plt
 import sys
+import concurrent.futures
+
 
 class ObjaverseDataLoader():
     def __init__(self, root_dir, batch_size, total_view=12, num_workers=4):
@@ -29,7 +31,7 @@ class ObjaverseDataLoader():
                                 image_transforms=self.image_transforms)
         # sampler = DistributedSampler(dataset)
         return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
-                             # sampler=sampler)
+        # sampler=sampler)
 
     def val_dataloader(self):
         dataset = ObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=True,
@@ -37,9 +39,11 @@ class ObjaverseDataLoader():
         sampler = DistributedSampler(dataset)
         return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
+
 def get_pose(transformation):
     # transformation: 4x4
     return transformation
+
 
 class ObjaverseData(Dataset):
     def __init__(self,
@@ -50,6 +54,8 @@ class ObjaverseData(Dataset):
                  T_in=1,
                  T_out=1,
                  fix_sample=False,
+                 save_preprocessed=False,
+                 use_preprocessed=True,
                  ) -> None:
         """Create a dataset from a folder of images.
         If you pass in a root directory it will be searched for images
@@ -58,6 +64,7 @@ class ObjaverseData(Dataset):
         self.root_dir = Path(root_dir)
         self.total_view = total_view
         self.T_in = T_in
+        # self.T_in = 12
         self.T_out = T_out
         self.fix_sample = fix_sample
 
@@ -83,6 +90,9 @@ class ObjaverseData(Dataset):
         self.fx = 560. / downscale
         self.fy = 560. / downscale
         self.intrinsic = torch.tensor([[self.fx, 0, 128., 0, self.fy, 128., 0, 0, 1.]], dtype=torch.float64).view(3, 3)
+        
+        self.save_preprocessed = save_preprocessed
+        self.use_preprocessed = use_preprocessed
 
     def __len__(self):
         return len(self.paths)
@@ -101,8 +111,19 @@ class ObjaverseData(Dataset):
         except:
             print(path)
             sys.exit()
-        img[img[:, :, -1] == 0.] = color
-        img = Image.fromarray(np.uint8(img[:, :, :3] * 255.))
+        
+        if self.use_preprocessed:
+            img = Image.fromarray(np.uint8(img[:, :, :3] * 255.))
+        else:
+            img[img[:, :, -1] == 0.] = color
+            img = Image.fromarray(np.uint8(img[:, :, :3] * 255.))
+        
+        if self.save_preprocessed:
+            img = img.resize((256, 256), Image.BILINEAR)
+            new_path = path.replace("zero123_data", "zero123_data_small")
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            img.save(new_path)
+        
         return img
 
     def __getitem__(self, index):
@@ -112,20 +133,24 @@ class ObjaverseData(Dataset):
         if self.fix_sample:
             if self.T_out > 1:
                 indexes = range(total_view)
-                index_targets = list(indexes[:2]) + list(indexes[-(self.T_out-2):])
-                index_inputs = indexes[1:self.T_in+1]   # one overlap identity
+                index_targets = list(indexes[:2]) + list(indexes[-(self.T_out - 2):])
+                index_inputs = indexes[1:self.T_in + 1]   # one overlap identity
             else:
                 indexes = range(total_view)
                 index_targets = indexes[:self.T_out]
-                index_inputs = indexes[self.T_out-1:self.T_in+self.T_out-1] # one overlap identity
+                index_inputs = indexes[self.T_out - 1:self.T_in + self.T_out - 1]  # one overlap identity
         else:
             assert self.T_in + self.T_out <= total_view
             # training with replace, including identity
-            indexes = np.random.choice(range(total_view), self.T_in+self.T_out, replace=True)
+            indexes = np.random.choice(range(total_view), self.T_in + self.T_out, replace=True)
             index_inputs = indexes[:self.T_in]
             index_targets = indexes[self.T_in:]
-        filename = os.path.join(self.root_dir, self.paths[index])
 
+        if self.save_preprocessed:
+            index_inputs = range(total_view)
+        
+        filename = os.path.join(self.root_dir, self.paths[index])
+        
         color = [1., 1., 1., 1.]
 
         try:
@@ -133,6 +158,7 @@ class ObjaverseData(Dataset):
             target_ims = []
             target_Ts = []
             cond_Ts = []
+            # TODO: asyn load
             for i, index_input in enumerate(index_inputs):
                 input_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_input), color))
                 input_ims.append(input_im)
