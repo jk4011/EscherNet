@@ -27,6 +27,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import transformers
+import accelerate
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed, DistributedDataParallelKwargs
@@ -60,6 +61,10 @@ from skimage.metrics import structural_similarity as calculate_ssim
 import lpips
 LPIPS = lpips.LPIPS(net='alex', version='0.1')
 
+from peft import LoraConfig
+from peft import get_peft_model
+
+
 if is_wandb_available():
     import wandb
 
@@ -78,6 +83,7 @@ def image_grid(imgs, rows, cols):
     for i, img in enumerate(imgs):
         grid.paste(img, box=(i % cols * w, i // cols * h))
     return grid
+
 
 @torch.no_grad()
 def log_validation(validation_dataloader, vae, image_encoder, feature_extractor, unet, args, accelerator, weight_dtype, split="val"):
@@ -113,7 +119,7 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
     val_loss = 0
     val_num = 0
     T_out = args.T_out  # fix to be 1?
-    for T_in_val in [1, args.T_in_val//2, args.T_in_val]:   # eval different number of given views
+    for T_in_val in [1, args.T_in_val // 2, args.T_in_val]:   # eval different number of given views
         for valid_step, batch in tqdm(enumerate(validation_dataloader)):
             if args.num_validation_batches is not None and valid_step >= args.num_validation_batches:
                 break
@@ -126,7 +132,7 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
             pose_out_inv = batch["pose_out_inv"].to(dtype=weight_dtype)  # BxTx4
 
             gt_image = einops.rearrange(gt_image, 'b t c h w -> (b t) c h w', t=T_out)
-            input_image = einops.rearrange(input_image, 'b t c h w -> (b t) c h w', t=T_in) # T_in
+            input_image = einops.rearrange(input_image, 'b t c h w -> (b t) c h w', t=T_in)  # T_in
 
             images = []
             h, w = input_image.shape[2:]
@@ -138,9 +144,9 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
                 pred_image = torch.from_numpy(image * 2. - 1.).permute(0, 3, 1, 2)
                 images.append(pred_image)
 
-                pred_np = (image * 255).astype(np.uint8) # [0,1]
+                pred_np = (image * 255).astype(np.uint8)  # [0,1]
                 gt_np = (gt_image / 2 + 0.5).clamp(0, 1)
-                gt_np = (gt_np.cpu().permute(0, 2, 3, 1).float().numpy()*255).astype(np.uint8)
+                gt_np = (gt_np.cpu().permute(0, 2, 3, 1).float().numpy() * 255).astype(np.uint8)
                 # for 1 image
                 # pixel loss
                 loss = F.mse_loss(pred_image[0], gt_image[0].cpu()).item()
@@ -163,7 +169,7 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
             )
 
         pixel_loss = val_loss / val_num
-        pixel_lpips= val_lpips / val_num
+        pixel_lpips = val_lpips / val_num
         pixel_ssim = val_ssim / val_num
         pixel_psnr = val_psnr / val_num
 
@@ -182,12 +188,11 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
                     formatted_images[0].append(wandb.Image(input_image, caption="{}_input".format(log_id)))
                     formatted_images[1].append(wandb.Image(gt_image, caption="{}_gt".format(log_id)))
 
-                    for sample_id, pred_image in enumerate(pred_images): # n_samples
+                    for sample_id, pred_image in enumerate(pred_images):  # n_samples
                         pred_image = wandb.Image(pred_image, caption="{}_pred_{}".format(log_id, sample_id))
                         formatted_images[2].append(pred_image)
 
                     table.add_data(*formatted_images[0], *formatted_images[1], *formatted_images[2])
-
 
                 tracker.log({split: table,  # formatted_images
                              "{}_T{}_pixel_loss".format(split, T_in_val): pixel_loss,
@@ -209,7 +214,7 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a Zero123 training script.")
-    
+
     parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
@@ -487,10 +492,12 @@ def parse_args(input_args=None):
 
     return args
 
+
 ConvNextV2_preprocess = transforms.Compose([
     transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BICUBIC),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
+
 
 def _encode_image(feature_extractor, image_encoder, image, device, dtype, do_classifier_free_guidance):
     # [-1, 1] -> [0, 1]
@@ -502,7 +509,7 @@ def _encode_image(feature_extractor, image_encoder, image, device, dtype, do_cla
         negative_prompt_embeds = torch.zeros_like(image_embeddings)
         image_embeddings = torch.cat([negative_prompt_embeds, image_embeddings])
 
-    return image_embeddings     #.detach() # !we need keep image encoder gradient
+    return image_embeddings  # .detach() # !we need keep image encoder gradient
 
 
 def main(args):
@@ -545,14 +552,26 @@ def main(args):
                 repo_id=args.hub_model_id or Path(args.output_dir).name, exist_ok=True, token=args.hub_token, private=True
             ).repo_id
 
-
     # Load scheduler and models
-    noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler", revision=args.revision)
+    noise_scheduler = DDPMScheduler.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="scheduler", revision=args.revision)
     image_encoder = CN_encoder.from_pretrained("facebook/convnextv2-tiny-22k-224")
     feature_extractor = None
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision)
-    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision)
-
+    unet = UNet2DConditionModel.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision)
+    
+    UNET_TARGET_MODULES = ["to_q", "to_v", "to_k", "query", "value", "key", "to_out.0", "add_k_proj", "add_v_proj"]
+    config = LoraConfig(
+        r=32,
+        lora_alpha=32,
+        lora_dropout=0.1,
+        inference_mode=False,
+        target_modules=UNET_TARGET_MODULES,
+    )
+    unet = get_peft_model(unet, config)
+    unet.print_trainable_parameters()
+    
     T_in = args.T_in
     T_in_val = args.T_in_val
     T_out = args.T_out
@@ -563,9 +582,8 @@ def main(args):
     image_encoder.train()
     image_encoder.requires_grad_(True)
 
-    unet.requires_grad_(True)
+    # unet.requires_grad_(True)
     unet.train()
-
 
     # Create EMA for the unet.
     if args.use_ema:
@@ -622,9 +640,9 @@ def main(args):
     else:
         optimizer_class = torch.optim.AdamW
 
-
+    unet_param = [param for param in unet.parameters() if param.requires_grad]
     optimizer = optimizer_class(
-        [{"params": unet.parameters(), "lr": args.learning_rate},
+        [{"params": unet_param, "lr": args.learning_rate},
          {"params": image_encoder.parameters(), "lr": args.learning_rate}],
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
@@ -633,7 +651,7 @@ def main(args):
 
     # print model info, learnable parameters, non-learnable parameters, total parameters, model size, all in billion
     def print_model_info(model):
-        print("="*20)
+        print("=" * 20)
         # print model class name
         print("model name: ", type(model).__name__)
         print("learnable parameters(M): ", sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6)
@@ -653,9 +671,12 @@ def main(args):
             transforms.Normalize([0.5], [0.5])
         ]
     )
-    train_dataset = ObjaverseData(root_dir=args.train_data_dir, image_transforms=image_transforms, validation=False, T_in=T_in, T_out=T_out)
-    train_log_dataset = ObjaverseData(root_dir=args.train_data_dir, image_transforms=image_transforms, validation=False, T_in=T_in_val, T_out=T_out, fix_sample=True)
-    validation_dataset = ObjaverseData(root_dir=args.train_data_dir, image_transforms=image_transforms, validation=True, T_in=T_in_val, T_out=T_out, fix_sample=True)
+    train_dataset = ObjaverseData(root_dir=args.train_data_dir,
+                                  image_transforms=image_transforms, validation=False, T_in=T_in, T_out=T_out)
+    train_log_dataset = ObjaverseData(root_dir=args.train_data_dir, image_transforms=image_transforms,
+                                      validation=False, T_in=T_in_val, T_out=T_out, fix_sample=True)
+    validation_dataset = ObjaverseData(root_dir=args.train_data_dir, image_transforms=image_transforms,
+                                       validation=True, T_in=T_in_val, T_out=T_out, fix_sample=True)
     # for training
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -684,7 +705,6 @@ def main(args):
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
-
 
     def warmup_lr_schedule(optimizer, step, max_step, init_lr, max_lr):
         """Warmup the learning rate"""
@@ -729,7 +749,8 @@ def main(args):
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
         run_name = args.output_dir.split("logs_")[1]
-        accelerator.init_trackers(args.tracker_project_name, config=tracker_config, init_kwargs={"wandb":{"name":run_name}})
+        accelerator.init_trackers(args.tracker_project_name, config=tracker_config,
+                                  init_kwargs={"wandb": {"name": run_name}})
 
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -759,13 +780,11 @@ def main(args):
             path = dirs[-1] if len(dirs) > 0 else None
 
         if path is None:
-            accelerator.print(
                 f"Checkpoint '{args.resume_from_checkpoint}' does not exist. Starting a new training run."
             )
             args.resume_from_checkpoint = None
             initial_global_step = 0
         else:
-            accelerator.print(f"Resuming from checkpoint {path}")
             accelerator.load_state(os.path.join(args.output_dir, path))
             global_step = int(path.split("-")[1])
 
@@ -787,7 +806,7 @@ def main(args):
         num_train_elems = 0
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(unet, image_encoder):
-                gt_image = batch["image_target"].to(dtype=weight_dtype) # BxTx3xHxW
+                gt_image = batch["image_target"].to(dtype=weight_dtype)  # BxTx3xHxW
                 gt_image = einops.rearrange(gt_image, 'b t c h w -> (b t) c h w', t=T_out)
                 input_image = batch["image_input"].to(dtype=weight_dtype)    # Bx3xHxW
                 input_image = einops.rearrange(input_image, 'b t c h w -> (b t) c h w', t=T_in)
@@ -797,21 +816,23 @@ def main(args):
                 pose_out_inv = batch["pose_out_inv"].to(dtype=weight_dtype)  # BxTx4
 
                 gt_latents = vae.encode(gt_image).latent_dist.sample().detach()
-                gt_latents = gt_latents * vae.config.scaling_factor # follow zero123, only target image latent is scaled
+                gt_latents = gt_latents * vae.config.scaling_factor  # follow zero123, only target image latent is scaled
 
                 # Sample noise that we'll add to the latents
                 bsz = gt_latents.shape[0] // T_out
                 noise = torch.randn_like(gt_latents)
                 # Sample a random timestep for each image
-                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=gt_latents.device)
+                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps,
+                                          (bsz,), device=gt_latents.device)
                 timesteps = timesteps.long()
                 timesteps = einops.repeat(timesteps, 'b -> (b t)', t=T_out)
 
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
-                noisy_latents = noise_scheduler.add_noise(gt_latents.to(dtype=torch.float32), noise.to(dtype=torch.float32), timesteps).to(dtype=gt_latents.dtype)
+                noisy_latents = noise_scheduler.add_noise(gt_latents.to(dtype=torch.float32), noise.to(
+                    dtype=torch.float32), timesteps).to(dtype=gt_latents.dtype)
 
-                if do_classifier_free_guidance:  #support classifier-free guidance, randomly drop out 5%
+                if do_classifier_free_guidance:  # support classifier-free guidance, randomly drop out 5%
                     # Conditioning dropout to support classifier-free guidance during inference. For more details
                     # check out the section 3.2.1 of the original paper https://arxiv.org/abs/2211.09800.
                     random_p = torch.rand(bsz, device=gt_latents.device)
@@ -819,7 +840,8 @@ def main(args):
                     prompt_mask = random_p < 2 * args.conditioning_dropout_prob
                     prompt_mask = prompt_mask.reshape(bsz, 1, 1, 1)
 
-                    img_prompt_embeds = _encode_image(feature_extractor, image_encoder, input_image, gt_latents.device, gt_latents.dtype, False)
+                    img_prompt_embeds = _encode_image(feature_extractor, image_encoder,
+                                                      input_image, gt_latents.device, gt_latents.dtype, False)
 
                     # Final text conditioning.
                     img_prompt_embeds = einops.rearrange(img_prompt_embeds, '(b t) l c -> b t l c', t=T_in)
@@ -829,7 +851,8 @@ def main(args):
                     prompt_embeds = torch.cat([img_prompt_embeds], dim=-1)
                 else:
                     # Get the image_with_pose embedding for conditioning
-                    prompt_embeds = _encode_image(feature_extractor, image_encoder, input_image, gt_latents.device, gt_latents.dtype, False)
+                    prompt_embeds = _encode_image(feature_extractor, image_encoder,
+                                                  input_image, gt_latents.device, gt_latents.dtype, False)
 
                 prompt_embeds = einops.rearrange(prompt_embeds, '(b t) l c -> b (t l) c', t=T_in)
 
@@ -841,7 +864,8 @@ def main(args):
                     latent_model_input,
                     timesteps,
                     encoder_hidden_states=prompt_embeds,    # (bxT_in) l 768
-                    pose=[[pose_out, pose_out_inv], [pose_in, pose_in_inv]],  # (bxT_in) 4, pose_out - self-attn, pose_in - cross-attn
+                    # (bxT_in) 4, pose_out - self-attn, pose_in - cross-attn
+                    pose=[[pose_out, pose_out_inv], [pose_in, pose_in_inv]],
                 ).sample
 
                 # Get the target for loss depending on the prediction type
@@ -1003,8 +1027,6 @@ def main(args):
 
             if global_step >= args.max_train_steps:
                 break
-
-
 
     # Create the pipeline using using the trained modules and save it.
     accelerator.wait_for_everyone()

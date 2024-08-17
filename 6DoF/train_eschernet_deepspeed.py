@@ -210,11 +210,6 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a Zero123 training script.")
     parser.add_argument(
-        "--config_file",
-        type=str,
-        default="tmp",
-    )
-    parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
         default="lambdalabs/sd-image-variations-diffusers",
