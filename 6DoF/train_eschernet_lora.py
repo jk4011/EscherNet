@@ -195,10 +195,10 @@ def log_validation(validation_dataloader, vae, image_encoder, feature_extractor,
                     table.add_data(*formatted_images[0], *formatted_images[1], *formatted_images[2])
 
                 tracker.log({split: table,  # formatted_images
-                             "{}_T{}_pixel_loss".format(split, T_in_val): pixel_loss,
-                             "{}_T{}_lpips".format(split, T_in_val): pixel_lpips,
-                             "{}_T{}_ssim".format(split, T_in_val): pixel_ssim,
-                             "{}_T{}_psnr".format(split, T_in_val): pixel_psnr})
+                             "{}_T{}/pixel_loss".format(split, T_in_val): pixel_loss,
+                             "{}_T{}/lpips".format(split, T_in_val): pixel_lpips,
+                             "{}_T{}/ssim".format(split, T_in_val): pixel_ssim,
+                             "{}_T{}/psnr".format(split, T_in_val): pixel_psnr})
             else:
                 logger.warn(f"image logging not implemented for {tracker.name}")
 
@@ -560,7 +560,7 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision)
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision)
-    
+
     UNET_TARGET_MODULES = ["to_q", "to_v", "to_k", "query", "value", "key", "to_out.0", "add_k_proj", "add_v_proj"]
     config = LoraConfig(
         r=32,
@@ -571,7 +571,7 @@ def main(args):
     )
     unet = get_peft_model(unet, config)
     unet.print_trainable_parameters()
-    
+
     T_in = args.T_in
     T_in_val = args.T_in_val
     T_out = args.T_out
