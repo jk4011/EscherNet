@@ -5,18 +5,11 @@ set -o xtrace # print command
 
 cd 6DoF
 
-N_GPUS=6
-TOTAL_BS=672
-N_ACCUMULATION=4
 
-let BS_PER_GPU=${TOTAL_BS}/${N_GPUS}/${N_ACCUMULATION}
-if [ $((BS_PER_GPU * N_GPUS * N_ACCUMULATION)) -ne ${TOTAL_BS} ]; then
-    echo "TOTAL_BS should be divisible by N_GPUS * N_ACCUMULATION"
-    exit 1
-fi
-echo "BS_PER_GPU: ${BS_PER_GPU}"
+# n_gpu랑 n_accumulation은 yaml에 있음.
+BS_PER_GPU=28
 
-CUDA_VISIBLE_DEVICES=2,3,4,5,6,7,0,1 accelerate launch \
+CUDA_VISIBLE_DEVICES=2,3,4,5 accelerate launch \
     --config_file ../configs/deepspeed.yaml \
     train_eschernet_deepspeed.py \
     --train_data_dir /data2/wlsgur4011/zero123_data_small/views_release \
