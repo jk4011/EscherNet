@@ -1004,9 +1004,9 @@ def main(args):
             loss_epoch += loss.detach().item()
             num_train_elems += 1
 
-            logs = {"loss": loss.detach().item(), "lr": optimizer.param_groups[0]['lr'],
-                    "loss_epoch": loss_epoch / num_train_elems,
-                    "epoch": epoch}
+            logs = {"train/loss": loss.detach().item(), "lr": optimizer.param_groups[0]['lr'],
+                    "train/loss_epoch": loss_epoch / num_train_elems,
+                    "train/epoch": epoch}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
 
