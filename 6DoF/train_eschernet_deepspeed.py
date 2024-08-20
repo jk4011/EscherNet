@@ -900,7 +900,7 @@ def main(args):
                 if global_step % args.checkpointing_steps == 0:
                     from jhutil import color_log; color_log(3333, )
                     # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
-                    if args.checkpoints_total_limit is not None:
+                    if accelerator.is_main_process and args.checkpoints_total_limit is not None:
                         checkpoints = os.listdir(args.output_dir)
                         checkpoints = [d for d in checkpoints if d.startswith("checkpoint")]
                         checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
@@ -917,11 +917,7 @@ def main(args):
 
                             for removing_checkpoint in removing_checkpoints:
                                 removing_checkpoint = os.path.join(args.output_dir, removing_checkpoint)
-                                try:
-                                    from jhutil import color_log; color_log(1111, removing_checkpoint)
-                                    shutil.rmtree(removing_checkpoint)
-                                except:
-                                    pass
+                                shutil.rmtree(removing_checkpoint)
 
                     save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                     from jhutil import color_log; color_log(4444, )
