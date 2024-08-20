@@ -751,10 +751,20 @@ def main(args):
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
         from jhutil import color_log; color_log(4444, "init wandb")
-        tracker_config = dict(vars(args))
         run_name = args.output_dir.split("logs_")[1]
+        if args.resume_from_checkpoint:
+            # load json file to get run_id
+            run_id = np.load(os.path.join(args.output_dir, 'run_id.npy')).item()
+            wandb_config = {"wandb": {"name": run_name, "id": run_id, "resume": "must"}}
+
+        else:
+            wandb_config = {"wandb": {"name": run_name}}
+
+        tracker_config = dict(vars(args))
         accelerator.init_trackers(args.tracker_project_name, config=tracker_config,
-                                  init_kwargs={"wandb": {"name": run_name}})
+                                  init_kwargs=wandb_config)
+
+        np.save(os.path.join(args.output_dir, 'run_id.npy'), wandb.run.id)
 
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -808,7 +818,7 @@ def main(args):
         disable=not accelerator.is_local_main_process,
     )
 
-    from jhutil import color_log; color_log(6666, "start training")
+    from jhutil import color_log; color_log(5555, "start training")
     for epoch in range(first_epoch, args.num_train_epochs):
         loss_epoch = 0.0
         num_train_elems = 0

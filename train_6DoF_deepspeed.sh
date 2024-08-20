@@ -8,6 +8,7 @@ cd 6DoF
 
 # n_gpu랑 n_accumulation은 yaml에 있음.
 BS_PER_GPU=28
+N_ACCUMULATION=6
 
 CUDA_VISIBLE_DEVICES=2,3,4,5 accelerate launch \
     --config_file ../configs/deepspeed.yaml \
@@ -24,6 +25,7 @@ CUDA_VISIBLE_DEVICES=2,3,4,5 accelerate launch \
     --T_in_val 10 \
     --output_dir logs_node${node}_deepspeed \
     --tracker_project_name eschernet
+    # --resume_from_checkpoint latest \
 
 # ... 
 
