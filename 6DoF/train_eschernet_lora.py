@@ -552,6 +552,7 @@ def main(args):
                 repo_id=args.hub_model_id or Path(args.output_dir).name, exist_ok=True, token=args.hub_token, private=True
             ).repo_id
 
+    from jhutil import color_log; color_log(1111, "load sd model")
     # Load scheduler and models
     noise_scheduler = DDPMScheduler.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="scheduler", revision=args.revision)
@@ -591,6 +592,7 @@ def main(args):
 
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
+            from jhutil import color_log; color_log(2222, "enable xformers")
             import xformers
 
             xformers_version = version.parse(xformers.__version__)
@@ -671,6 +673,7 @@ def main(args):
             transforms.Normalize([0.5], [0.5])
         ]
     )
+    from jhutil import color_log; color_log(3333, "setup dataloader")
     train_dataset = ObjaverseData(root_dir=args.train_data_dir,
                                   image_transforms=image_transforms, validation=False, T_in=T_in, T_out=T_out)
     train_log_dataset = ObjaverseData(root_dir=args.train_data_dir, image_transforms=image_transforms,
@@ -747,6 +750,7 @@ def main(args):
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
+        from jhutil import color_log; color_log(4444, "init wandb")
         tracker_config = dict(vars(args))
         run_name = args.output_dir.split("logs_")[1]
         accelerator.init_trackers(args.tracker_project_name, config=tracker_config,
@@ -770,6 +774,7 @@ def main(args):
 
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
+        from jhutil import color_log; color_log("aaaa", "resume from checkpoint")
         if args.resume_from_checkpoint != "latest":
             path = os.path.basename(args.resume_from_checkpoint)
         else:
@@ -803,6 +808,7 @@ def main(args):
         disable=not accelerator.is_local_main_process,
     )
 
+    from jhutil import color_log; color_log(6666, "start training")
     for epoch in range(first_epoch, args.num_train_epochs):
         loss_epoch = 0.0
         num_train_elems = 0
@@ -902,6 +908,7 @@ def main(args):
 
                 if accelerator.is_main_process:
                     if global_step % args.checkpointing_steps == 0:
+                        from jhutil import color_log; color_log("bbbb", "save states")
                         # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
                         if args.checkpoints_total_limit is not None:
                             checkpoints = os.listdir(args.output_dir)
@@ -925,6 +932,9 @@ def main(args):
                         save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
+                        from jhutil import color_log; color_log("bbbb", "save states done")
+
+                        from jhutil import color_log; color_log("cccc", "save pipelines")
 
                         # save pipeline
                         # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
@@ -981,6 +991,7 @@ def main(args):
                             ema_unet.restore(unet.parameters())
 
                     if validation_dataloader is not None and global_step % args.validation_steps == 0 and global_step > 5:
+                        from jhutil import color_log; color_log(6666, "validation starts")
                         if args.use_ema:
                             # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
                             ema_unet.store(unet.parameters())
